@@ -241,5 +241,5 @@ Distributed under the MIT License. See `LICENSE` for details.
 
 ## 👤 Author
 
-**Aayush Bhartia**
+**Anshul Bhartia**
 - GitHub: [@a22bhartia](https://github.com/a22bhartia)
