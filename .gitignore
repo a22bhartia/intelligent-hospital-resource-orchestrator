@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environments & Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+.env
+.env.local
+.env.*
+
+# Unit test / coverage / cache reports
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+
+# Docker volumes & local db data
+mysql_data/
+db_data/
+redis_data/
+
+# OS database files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+.DS_Store
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Application generated outputs
+simulation_output.csv
+*.log

@@ -1,0 +1,123 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hospital-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: hospitaldb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: hospital-redis
+    ports:
+      - "6379:6379"
+
+  prediction-service:
+    build: ./prediction_service
+    ports:
+      - "8002:8000"
+
+  # ✅ NEW: Event/Outbreak Analyzer microservice
+  event-analyzer-service:
+    build: ./event-analyzer-service
+    ports:
+      - "8007:8000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: hospitaldb
+      DB_USER: appuser
+      DB_PASS: apppass
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  allocation-service:
+    build: ./allocation_service
+    ports:
+      - "8003:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      prediction-service:
+        condition: service_started
+      capacity-service:
+        condition: service_started
+      logger-service:
+        condition: service_started
+      # ✅ NEW: make sure analyzer is up before allocation starts
+      event-analyzer-service:
+        condition: service_started
+      load-shedding-service:
+        condition: service_started
+
+  capacity-service:
+    build: ./capacity_service
+    ports:
+      - "8005:8000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: hospitaldb
+      DB_USER: appuser
+      DB_PASS: apppass
+      TOKEN_VALIDATION_URL: http://load-shedding-service:8000/shedding/validate/{token}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  logger-service:
+    build: ./logger_service
+    ports:
+      - "8004:8000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: hospitaldb
+      DB_USER: appuser
+      DB_PASS: apppass
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  load-shedding-service:
+    build: ./load_shedding_service
+    ports:
+      - "8006:8000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CAPACITY_URL: http://capacity-service:8000/capacity/{hospital_id}
+      CAPACITY_RESERVE_URL: http://capacity-service:8000/capacity/{hospital_id}/reserve
+      LOGGER_LOGS_URL: http://logger-service:8000/logs?limit=200
+      KNOWN_HOSPITALS: H01,H02,H03
+    depends_on:
+      redis:
+        condition: service_started
+      capacity-service:
+        condition: service_started
+      logger-service:
+        condition: service_started
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - allocation-service
+      - load-shedding-service
+
+volumes:
+  mysql_data:

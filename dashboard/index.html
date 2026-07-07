@@ -1,0 +1,1307 @@
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Healthcare Emergency Load Prediction Dashboard</title>
+
+  <!-- ✅ Phase 6: Leaflet (CSS + JS) - add ABOVE Tailwind -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    pre { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+  <!-- Top bar -->
+  <header class="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-slate-900 text-white grid place-items-center font-black">H</div>
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">Healthcare Emergency Load Prediction</h1>
+          <p class="text-sm text-slate-500">Microservices dashboard (Allocation → Prediction → Logger)</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="apiStatus" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">Checking services…</span>
+        <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="refreshAll()" type="button">
+          ⟳ Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-3 gap-6">
+    <!-- Left column: Inputs -->
+    <section class="lg:col-span-1 space-y-6">
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Enter current situation</h2>
+            <p class="text-sm text-slate-500 mt-1">Fill values, then run decision (calls Allocation Service).</p>
+          </div>
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">Demo</span>
+        </div>
+
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="text-sm font-medium text-slate-700">Hospital ID</label>
+            <input id="hospital_id" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="H01" />
+            <p class="text-xs text-slate-500 mt-1">Example: H01, H02, H03</p>
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Hour (0–23)</label>
+            <input id="hour" type="number" min="0" max="23" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="19" />
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Day of week (0–6)</label>
+            <input id="day_of_week" type="number" min="0" max="6" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="3" />
+            <p class="text-xs text-slate-500 mt-1">0=Sun, 6=Sat</p>
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Ambulance cases</label>
+            <input id="ambulance_cases" type="number" min="0" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="12" />
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Walk-in cases</label>
+            <input id="walkin_cases" type="number" min="0" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="25" />
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Weather risk (0/1)</label>
+            <input id="weather_risk" type="number" min="0" max="1" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="1" />
+          </div>
+
+          <div>
+            <label class="text-sm font-medium text-slate-700">Event risk (0/1)</label>
+            <input id="event_risk" type="number" min="0" max="1" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="0" />
+          </div>
+
+          <div class="col-span-2">
+            <label class="text-sm font-medium text-slate-700">Outbreak risk (0/1)</label>
+            <input id="outbreak_risk" type="number" min="0" max="1" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 mt-1" value="0" />
+          </div>
+
+          <!-- ✅ NEW: Incident type -->
+          <div class="col-span-2">
+            <label class="text-sm font-medium text-slate-700">Incident type</label>
+            <select id="incident_type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2">
+              <option value="none">None</option>
+              <option value="accident">Accident / Mass casualty</option>
+              <option value="dengue">Dengue outbreak</option>
+              <option value="covid">Respiratory outbreak</option>
+              <option value="flood">Flood</option>
+              <option value="fire">Fire</option>
+            </select>
+          </div>
+
+          <!-- ✅ NEW: Incident severity -->
+          <div class="col-span-2">
+            <label class="text-sm font-medium text-slate-700">Incident severity (0–10)</label>
+            <input id="incident_severity" type="number" min="0" max="10"
+              class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2" value="0" />
+            <p class="text-xs text-slate-500 mt-1">0 = none, 10 = extreme</p>
+          </div>
+        </div>
+
+        <!-- ✅ Phase 4 buttons -->
+        <div class="mt-5 flex flex-wrap gap-2">
+          <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-slate-900 text-white hover:bg-slate-800" onclick="runDecision()" type="button">
+            ▶ Run Decision
+          </button>
+
+          <!-- ✅ FIX 1: proper Tailwind classes (no "...") -->
+          <button
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50"
+            onclick="resetCapacityForHospital()"
+            type="button"
+          >
+            ♻ Reset Capacity (This Hospital)
+          </button>
+
+          <button
+            class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50"
+            onclick="resetCapacityAll()"
+            type="button"
+          >
+            ♻ Reset Capacity (All)
+          </button>
+
+          <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="loadLogs()" type="button">
+            🧾 Refresh Logs
+          </button>
+
+          <button id="startMonBtn" class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="startMonitoring()" type="button">
+            🟢 Start Monitoring
+          </button>
+
+          <button id="stopMonBtn" class="hidden inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="stopMonitoring()" type="button">
+            ⛔ Stop
+          </button>
+
+          <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="fillSample('low')" type="button">Low</button>
+          <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="fillSample('medium')" type="button">Medium</button>
+          <button class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50" onclick="fillSample('high')" type="button">High</button>
+        </div>
+
+        <!-- ✅ Phase 4: alert banner -->
+        <div id="alertBanner" class="hidden mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p class="font-extrabold text-red-800">🚨 HIGH LOAD ALERT</p>
+          <p id="alertText" class="mt-1 text-sm text-red-700">
+            Auto-monitor detected HIGH load. Recommended action will be shown on the right.
+          </p>
+        </div>
+
+        <div id="transferBanner" class="hidden mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4">
+          <p class="font-extrabold text-sky-900">Transfer Recommended</p>
+          <p id="transferText" class="mt-1 text-sm text-sky-800">Redirect recommendation pending.</p>
+          <button id="confirmTransferBtn" class="mt-3 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-sky-900 text-white hover:bg-sky-800" onclick="confirmTransfer()" type="button">
+            Confirm Transfer
+          </button>
+        </div>
+
+        <div id="hint" class="mt-4 text-sm text-slate-500">
+          Tip: try “High” preset to see an emergency response action.
+        </div>
+      </div>
+
+      <!-- Service endpoints -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <h3 class="text-base font-extrabold">Service endpoints</h3>
+        <div class="mt-3 space-y-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Allocation</span>
+            <a class="text-slate-900 underline" href="http://localhost:8003/docs" target="_blank">localhost:8003/docs</a>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Prediction</span>
+            <a class="text-slate-900 underline" href="http://localhost:8002/docs" target="_blank">localhost:8002/docs</a>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-600">Logger</span>
+            <a class="text-slate-900 underline" href="http://localhost:8004/docs" target="_blank">localhost:8004/docs</a>
+          </div>
+        </div>
+        <p class="mt-3 text-xs text-slate-500">
+          These open the Swagger UI for each microservice.
+        </p>
+      </div>
+    </section>
+
+    <!-- Right column -->
+    <section class="lg:col-span-2 space-y-6">
+      <!-- Decision output -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Decision output</h2>
+            <p class="text-sm text-slate-500 mt-1">Result from Allocation Service (/decide).</p>
+          </div>
+          <div id="severityChip" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">No decision yet</div>
+        </div>
+
+        <div class="mt-4 grid md:grid-cols-3 gap-4">
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">Hospital</p>
+            <p id="outHospital" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">Predicted load</p>
+            <p id="outLoad" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">Recommended action</p>
+            <p id="outAction" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+        </div>
+
+        <!-- Resource allocation + capacity -->
+        <div class="mt-4 grid md:grid-cols-2 gap-4">
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-sm font-bold text-slate-800">Allocated now</p>
+            <div class="mt-3 grid grid-cols-3 gap-3">
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Beds</p>
+                <p id="allocBeds" class="mt-1 text-lg font-extrabold">—</p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Staff</p>
+                <p id="allocStaff" class="mt-1 text-lg font-extrabold">—</p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Vents</p>
+                <p id="allocVents" class="mt-1 text-lg font-extrabold">—</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-sm font-bold text-slate-800">Capacity (free)</p>
+            <div class="mt-3 grid grid-cols-3 gap-3">
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Beds</p>
+                <p class="mt-1 text-sm text-slate-600">Before: <span id="bedsBefore">—</span></p>
+                <p class="mt-1 text-sm font-bold text-slate-900">After: <span id="bedsAfter">—</span></p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Staff</p>
+                <p class="mt-1 text-sm text-slate-600">Before: <span id="staffBefore">—</span></p>
+                <p class="mt-1 text-sm font-bold text-slate-900">After: <span id="staffAfter">—</span></p>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <p class="text-xs text-slate-500">Vents</p>
+                <p class="mt-1 text-sm text-slate-600">Before: <span id="ventsBefore">—</span></p>
+                <p class="mt-1 text-sm font-bold text-slate-900">After: <span id="ventsAfter">—</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✅ NEW: Incident Analyzer card (below recommended action cards / same container) -->
+        <div class="mt-4 rounded-2xl border border-slate-200 p-4">
+          <p class="text-sm font-bold text-slate-800">Incident analyzer</p>
+          <div class="mt-2 grid grid-cols-2 gap-3">
+            <div class="rounded-xl bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Type</p>
+              <p id="incType" class="mt-1 font-extrabold">—</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Severity</p>
+              <p id="incSev" class="mt-1 font-extrabold">—</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Label</p>
+              <p id="incLabel" class="mt-1 font-extrabold">—</p>
+            </div>
+            <div class="rounded-xl bg-slate-50 p-3">
+              <p class="text-xs text-slate-500">Risk score</p>
+              <p id="incScore" class="mt-1 font-extrabold">—</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- raw response hidden by default -->
+        <div class="mt-4 hidden">
+          <p class="text-sm font-semibold text-slate-800">Raw response (for debugging)</p>
+          <pre id="rawOutput" class="mt-2 bg-slate-900 text-slate-100 rounded-2xl p-4 text-sm overflow-auto">Click “Run Decision”</pre>
+        </div>
+
+        <div id="errorBox" class="hidden mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p class="font-bold text-red-700">Something went wrong</p>
+          <pre id="errorText" class="mt-2 text-sm text-red-800 overflow-auto"></pre>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Live analytics</h2>
+            <p class="text-sm text-slate-500 mt-1">Charts computed from Logger Service logs.</p>
+          </div>
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">Charts</span>
+        </div>
+
+        <div class="mt-4 grid md:grid-cols-2 gap-6">
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Load distribution</p>
+            <canvas id="pieChart" height="140"></canvas>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-sm font-semibold text-slate-700 mb-2">Trend (last 20)</p>
+            <canvas id="lineChart" height="140"></canvas>
+          </div>
+        </div>
+
+        <div class="mt-6 rounded-2xl border border-slate-200 p-4">
+          <p class="text-sm font-semibold text-slate-700 mb-2">Event fingerprint overlay</p>
+          <canvas id="fingerprintChart" height="120"></canvas>
+        </div>
+      </div>
+
+      <!-- Hospital Overview -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Hospital overview</h2>
+            <p class="text-sm text-slate-500 mt-1">Latest status per hospital (from logs).</p>
+          </div>
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">Live</span>
+        </div>
+
+        <div id="hospitalCards" class="mt-4 grid md:grid-cols-3 gap-4">
+          <div class="rounded-2xl border border-slate-200 p-4 text-slate-500">Refresh logs to load overview…</div>
+        </div>
+      </div>
+
+      <!-- Map View -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Map view</h2>
+            <p class="text-sm text-slate-500 mt-1">Live hospital status on map</p>
+          </div>
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">Geo</span>
+        </div>
+
+        <div id="map" class="mt-4 rounded-2xl border border-slate-200" style="height: 360px;"></div>
+
+        <p class="mt-3 text-xs text-slate-500">
+          Markers update automatically based on latest logs.
+        </p>
+      </div>
+
+      <!-- Logs -->
+      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-extrabold">Recent logs</h2>
+            <p class="text-sm text-slate-500 mt-1">Last 100 events from Logger Service (/logs).</p>
+          </div>
+          <span id="logCountChip" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700">0 logs</span>
+        </div>
+
+        <!-- KPI summary -->
+        <div class="mt-4 grid sm:grid-cols-4 gap-3">
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">Total logs</p>
+            <p id="kpiTotal" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">HIGH alerts</p>
+            <p id="kpiHigh" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">MEDIUM</p>
+            <p id="kpiMed" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 p-4">
+            <p class="text-xs text-slate-500">LOW</p>
+            <p id="kpiLow" class="mt-1 text-lg font-extrabold">—</p>
+          </div>
+        </div>
+
+        <!-- Filters + export -->
+        <div class="mt-4 grid md:grid-cols-4 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Hospital</label>
+            <select id="filterHospital" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900">
+              <option value="">All</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Load</label>
+            <select id="filterLoad" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900">
+              <option value="">All</option>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-600">Search action</label>
+            <input id="filterSearch" placeholder="e.g. beds / staff" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900" />
+          </div>
+
+          <div class="flex items-end gap-2">
+            <button class="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-white text-slate-900 border border-slate-300 hover:bg-slate-50"
+              onclick="applyFiltersAndRender()" type="button">
+              🔎 Apply
+            </button>
+
+            <button class="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition bg-slate-900 text-white hover:bg-slate-800"
+              onclick="exportCSV()" type="button">
+              ⬇ Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-auto border border-slate-200 rounded-2xl">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50">
+              <tr class="text-left">
+                <th class="px-4 py-3 font-bold text-slate-700">Time (UTC)</th>
+                <th class="px-4 py-3 font-bold text-slate-700">Hospital</th>
+                <th class="px-4 py-3 font-bold text-slate-700">Load</th>
+                <th class="px-4 py-3 font-bold text-slate-700">Action</th>
+              </tr>
+            </thead>
+            <tbody id="logsTable" class="divide-y divide-slate-200">
+              <tr>
+                <td class="px-4 py-4 text-slate-500" colspan="4">Click “Refresh Logs”</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details class="mt-4">
+          <summary class="cursor-pointer text-sm font-semibold text-slate-700">Show raw logs JSON</summary>
+          <pre id="rawLogs" class="mt-2 bg-slate-900 text-slate-100 rounded-2xl p-4 text-sm overflow-auto">—</pre>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-4 pb-10 text-xs text-slate-500">
+    Built with Docker Compose + FastAPI microservices. Dashboard served by Nginx.
+  </footer>
+
+<script>
+  const ALLOCATION_DECIDE_URL = "/api/allocation/decide";
+  const LOGGER_LOGS_URL = "/api/logger/logs";
+  const CAPACITY_BASE_URL = "/api/capacity/capacity";
+  const LOAD_SHEDDING_CONFIRM_URL = "/api/load-shedding/shedding/confirm-transfer";
+
+  let pieChartRef = null;
+  let lineChartRef = null;
+  let fingerprintChartRef = null;
+
+  let lastLogsRaw = [];
+  let lastLogsFiltered = [];
+  let recentRiskSeries = [];
+  let lastTransferRecommendation = null;
+
+  function loadToNumber(load) {
+    if (load === "LOW") return 1;
+    if (load === "MEDIUM") return 2;
+    if (load === "HIGH") return 3;
+    return 0;
+  }
+
+  function setSeverityChip(load) {
+    const chip = document.getElementById("severityChip");
+    if (!load) {
+      chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-slate-100 text-slate-700";
+      chip.textContent = "No decision yet";
+      return;
+    }
+    if (load === "HIGH") {
+      chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-red-100 text-red-800";
+      chip.textContent = "🔴 HIGH load";
+    } else if (load === "MEDIUM") {
+      chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-900";
+      chip.textContent = "🟡 MEDIUM load";
+    } else {
+      chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-900";
+      chip.textContent = "🟢 LOW load";
+    }
+  }
+
+  function showError(err) {
+    const box = document.getElementById("errorBox");
+    const text = document.getElementById("errorText");
+    box.classList.remove("hidden");
+    text.textContent = (typeof err === "string") ? err : JSON.stringify(err, null, 2);
+  }
+
+  function clearError() {
+    const box = document.getElementById("errorBox");
+    box.classList.add("hidden");
+    document.getElementById("errorText").textContent = "";
+  }
+
+  function getPayloadFromInputs() {
+    return {
+      hospital_id: document.getElementById("hospital_id").value.trim(),
+      hour: Number(document.getElementById("hour").value),
+      day_of_week: Number(document.getElementById("day_of_week").value),
+      ambulance_cases: Number(document.getElementById("ambulance_cases").value),
+      walkin_cases: Number(document.getElementById("walkin_cases").value),
+      weather_risk: Number(document.getElementById("weather_risk").value),
+      event_risk: Number(document.getElementById("event_risk").value),
+      outbreak_risk: Number(document.getElementById("outbreak_risk").value),
+
+      // ✅ NEW fields: passed to allocation-service (and then your analyzer microservice)
+      incident_type: document.getElementById("incident_type").value,
+      incident_severity: Number(document.getElementById("incident_severity").value),
+      recent_risk_series: recentRiskSeries.slice(-12),
+    };
+  }
+
+  function prettifyAction(action) {
+    if (!action) return "—";
+    return action.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, (t) => t.toUpperCase());
+  }
+
+  function updateIncidentCard(data) {
+    const inc = data?.incident || {};
+    const ana = inc?.analysis || {};
+
+    const typeVal = (inc.type ?? "—");
+    const sevVal = (inc.severity ?? "—");
+    const labelVal = (ana.label ?? "—");
+
+    // analyzer might return risk_score OR riskScore; support both
+    const scoreVal = (ana.risk_score ?? ana.riskScore ?? "—");
+
+    const elType = document.getElementById("incType");
+    const elSev = document.getElementById("incSev");
+    const elLabel = document.getElementById("incLabel");
+    const elScore = document.getElementById("incScore");
+
+    if (elType)  elType.textContent = typeVal;
+    if (elSev)   elSev.textContent = sevVal;
+    if (elLabel) elLabel.textContent = labelVal;
+    if (elScore) elScore.textContent = scoreVal;
+
+    recentRiskSeries.push(Number(ana.risk_score ?? 0));
+    recentRiskSeries = recentRiskSeries.slice(-24);
+    updateFingerprintChart(ana);
+  }
+
+  function updateTransferRecommendation(rec, hospitalId) {
+    const banner = document.getElementById("transferBanner");
+    const text = document.getElementById("transferText");
+    const btn = document.getElementById("confirmTransferBtn");
+    if (!banner || !text || !btn) return;
+
+    lastTransferRecommendation = rec || null;
+    if (!rec) {
+      banner.classList.add("hidden");
+      return;
+    }
+
+    text.textContent = `${hospitalId} -> ${rec.recommended_hospital_id} (score ${rec.transfer_score}, beds ${rec.estimated_beds_available})`;
+    btn.disabled = false;
+    banner.classList.remove("hidden");
+  }
+
+  async function confirmTransfer() {
+    if (!lastTransferRecommendation?.pre_authorization_token) return;
+
+    try {
+      const res = await fetch(LOAD_SHEDDING_CONFIRM_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: lastTransferRecommendation.pre_authorization_token }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(JSON.stringify(data));
+
+      document.getElementById("transferText").textContent =
+        `Transfer confirmed to ${data.target_hospital_id}. Capacity reserved.`;
+      document.getElementById("confirmTransferBtn").disabled = true;
+      await loadLogs();
+    } catch (e) {
+      showError(String(e));
+    }
+  }
+
+  function updateFingerprintChart(analysis) {
+    const chartEl = document.getElementById("fingerprintChart");
+    if (!chartEl) return;
+
+    const matches = analysis?.fingerprint_matches || [];
+    const closest = matches[0] || null;
+    const current = recentRiskSeries.slice(-12);
+    const historical = closest?.temporal_signature || [];
+    const label = closest
+      ? `${closest.hospital_id} ${closest.source_date} (DTW ${closest.dtw_distance})`
+      : "No historical match";
+
+    if (fingerprintChartRef) fingerprintChartRef.destroy();
+    fingerprintChartRef = new Chart(chartEl, {
+      type: "line",
+      data: {
+        labels: Array.from({ length: Math.max(current.length, historical.length, 1) }, (_, i) => `T${i + 1}`),
+        datasets: [
+          {
+            label: "Current event shape",
+            data: current,
+            borderColor: "#0f172a",
+            tension: 0.25
+          },
+          {
+            label,
+            data: historical,
+            borderColor: "#0284c7",
+            tension: 0.25
+          }
+        ]
+      },
+      options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+    });
+  }
+
+  async function runDecision() {
+    clearError();
+    const payload = getPayloadFromInputs();
+
+    try {
+      const res = await fetch(ALLOCATION_DECIDE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError({ status: res.status, response: data });
+        return;
+      }
+
+      document.getElementById("outHospital").textContent = data.hospital_id ?? "—";
+      document.getElementById("outLoad").textContent = data.predicted_load ?? "—";
+      document.getElementById("outAction").textContent = prettifyAction(data.action ?? "—");
+      setSeverityChip(data.predicted_load);
+
+      document.getElementById("allocBeds").textContent = data.allocation?.beds ?? "—";
+      document.getElementById("allocStaff").textContent = data.allocation?.staff ?? "—";
+      document.getElementById("allocVents").textContent = data.allocation?.ventilators ?? "—";
+
+      const b = data.capacity_before || {};
+      const a = data.capacity_after || {};
+
+      document.getElementById("bedsBefore").textContent  = b.beds_free ?? "—";
+      document.getElementById("bedsAfter").textContent   = a.beds_free ?? "—";
+
+      document.getElementById("staffBefore").textContent = b.staff_free ?? "—";
+      document.getElementById("staffAfter").textContent  = a.staff_free ?? "—";
+
+      document.getElementById("ventsBefore").textContent = b.ventilators_free ?? "—";
+      document.getElementById("ventsAfter").textContent  = a.ventilators_free ?? "—";
+
+      // ✅ NEW: populate incident analyzer UI card
+      updateIncidentCard(data);
+      updateTransferRecommendation(data.transfer_recommendation, data.hospital_id);
+
+      await loadLogs();
+    } catch (e) {
+      showError(String(e));
+    }
+  }
+
+  // ✅ Phase 6: MAP VIEW (Leaflet)
+  let map = null;
+  let markers = {};
+
+  const HOSPITAL_LOCATIONS = {
+    "H01": { name: "City Hospital", lat: 28.6139, lon: 77.2090 },
+    "H02": { name: "Metro Hospital", lat: 28.5355, lon: 77.3910 },
+    "H03": { name: "Community Hospital", lat: 28.7041, lon: 77.1025 }
+  };
+
+  function initMap() {
+    if (map) return;
+
+    map = L.map("map").setView([28.6139, 77.2090], 10);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+
+    for (const hid of Object.keys(HOSPITAL_LOCATIONS)) {
+      const loc = HOSPITAL_LOCATIONS[hid];
+
+      const marker = L.circleMarker([loc.lat, loc.lon], {
+        radius: 10,
+        color: "gray",
+        fillColor: "gray",
+        fillOpacity: 0.8
+      }).addTo(map);
+
+      marker.bindPopup(`${loc.name} (${hid})`);
+
+      marker.on("click", () => {
+        selectHospital(hid);
+      });
+
+      markers[hid] = marker;
+    }
+  }
+
+  function colorForLoad(load) {
+    if (load === "HIGH") return "red";
+    if (load === "MEDIUM") return "orange";
+    if (load === "LOW") return "green";
+    return "gray";
+  }
+
+  function updateMapMarkers(items) {
+    initMap();
+
+    const latest = {};
+    for (const it of (items ?? [])) {
+      if (it.hospital_id) latest[it.hospital_id] = it;
+    }
+
+    for (const hid of Object.keys(HOSPITAL_LOCATIONS)) {
+      const marker = markers[hid];
+      const record = latest[hid];
+      if (!marker) continue;
+
+      const load = record?.predicted_load || null;
+      const action = record?.action || "—";
+      const ts = record?.timestamp?.replace("T", " ").slice(0, 19) || "No data";
+
+      const color = colorForLoad(load);
+      marker.setStyle({ color, fillColor: color });
+
+      const loc = HOSPITAL_LOCATIONS[hid];
+      const popupHtml = `
+        <b>${loc.name}</b> (${hid})<br/>
+        Load: <b>${load || "—"}</b><br/>
+        Action: ${prettifyAction(action)}<br/>
+        Updated: ${ts}
+      `;
+      marker.bindPopup(popupHtml);
+    }
+  }
+
+  // Helpers
+  function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function uniqueSorted(arr) {
+    return Array.from(new Set(arr)).sort();
+  }
+
+  function populateHospitalFilter(items) {
+    const sel = document.getElementById("filterHospital");
+    if (!sel) return;
+
+    const hospitals = uniqueSorted((items ?? []).map(x => x.hospital_id).filter(Boolean));
+    const current = sel.value;
+
+    sel.innerHTML =
+      `<option value="">All</option>` +
+      hospitals.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join("");
+
+    sel.value = hospitals.includes(current) ? current : "";
+  }
+
+  function computeKPIs(items) {
+    let low = 0, med = 0, high = 0;
+    for (const it of (items ?? [])) {
+      if (it.predicted_load === "LOW") low++;
+      else if (it.predicted_load === "MEDIUM") med++;
+      else if (it.predicted_load === "HIGH") high++;
+    }
+    setText("kpiTotal", (items ?? []).length);
+    setText("kpiHigh", high);
+    setText("kpiMed", med);
+    setText("kpiLow", low);
+  }
+
+  function filterItems(items) {
+    const hosp = (document.getElementById("filterHospital")?.value || "").trim();
+    const load = (document.getElementById("filterLoad")?.value || "").trim();
+    const q = (document.getElementById("filterSearch")?.value || "").trim().toLowerCase();
+
+    return (items ?? []).filter(it => {
+      if (hosp && it.hospital_id !== hosp) return false;
+      if (load && it.predicted_load !== load) return false;
+      if (q) {
+        const action = (it.action || "").toLowerCase();
+        if (!action.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function applyFiltersAndRender() {
+    lastLogsFiltered = filterItems(lastLogsRaw);
+    renderLogsTable(lastLogsFiltered);
+    updateCharts(lastLogsFiltered);
+    updateHospitalOverview(lastLogsFiltered);
+    updateMapMarkers(lastLogsFiltered);
+  }
+
+  function renderLogsTable(itemsOldestToNewest) {
+    const tbody = document.getElementById("logsTable");
+    if (!tbody) return;
+
+    const items = (itemsOldestToNewest ?? []).slice().reverse();
+
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td class="px-4 py-4 text-slate-500" colspan="4">No logs for current filters</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map(item => {
+      const load = item.predicted_load || "—";
+      const loadBadge = badgeForLoad(load);
+      const ts = (item.timestamp || "—").replace("T", " ").slice(0, 19);
+      const act = prettifyAction(item.action || "—");
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 text-slate-600 whitespace-nowrap">${escapeHtml(ts)}</td>
+          <td class="px-4 py-3 font-semibold">${escapeHtml(item.hospital_id || "—")}</td>
+          <td class="px-4 py-3">${loadBadge}</td>
+          <td class="px-4 py-3 text-slate-700">${escapeHtml(act)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function exportCSV() {
+    const rows = [["timestamp_utc", "hospital_id", "predicted_load", "action"]];
+    const items = lastLogsFiltered.length ? lastLogsFiltered : lastLogsRaw;
+
+    for (const it of items) {
+      rows.push([it.timestamp || "", it.hospital_id || "", it.predicted_load || "", it.action || ""]);
+    }
+
+    const csv = rows.map(r => r.map(cell => {
+      const s = String(cell ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replaceAll('"', '""')}"`;
+      }
+      return s;
+    }).join(",")).join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hospital_logs.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function updateHospitalOverview(items) {
+    const container = document.getElementById("hospitalCards");
+    if (!container) return;
+
+    const latest = {};
+    for (const it of (items ?? [])) {
+      if (!it.hospital_id) continue;
+      latest[it.hospital_id] = it;
+    }
+
+    const hospitals = Object.keys(latest).sort();
+
+    if (hospitals.length === 0) {
+      container.innerHTML = `<div class="rounded-2xl border border-slate-200 p-4 text-slate-500">No logs yet. Run a few decisions first.</div>`;
+      return;
+    }
+
+    container.innerHTML = hospitals.map(hid => {
+      const it = latest[hid];
+      const load = it.predicted_load || "—";
+      const action = prettifyAction(it.action || "—");
+      const ts = (it.timestamp || "").replace("T", " ").slice(0, 19) || "—";
+      const badge = badgeForLoad(load);
+
+      return `
+        <button
+          class="text-left rounded-2xl border border-slate-200 p-4 hover:bg-slate-50 transition"
+          onclick="selectHospital('${escapeHtml(hid)}')"
+          title="Click to select ${escapeHtml(hid)}"
+          type="button"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs text-slate-500">Hospital</p>
+              <p class="text-lg font-extrabold">${escapeHtml(hid)}</p>
+            </div>
+            <div>${badge}</div>
+          </div>
+
+          <p class="mt-3 text-xs text-slate-500">Recommended action</p>
+          <p class="mt-1 text-sm font-semibold text-slate-800">${escapeHtml(action)}</p>
+
+          <p class="mt-3 text-xs text-slate-500">Last updated (UTC)</p>
+          <p class="mt-1 text-sm text-slate-700">${escapeHtml(ts)}</p>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function selectHospital(hid) {
+    document.getElementById("hospital_id").value = hid;
+    document.getElementById("hint").textContent = `Selected ${hid}. Adjust inputs or click “Run Decision”.`;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function loadLogs() {
+    clearError();
+    try {
+      const res = await fetch(LOGGER_LOGS_URL);
+      const data = await res.json();
+
+      document.getElementById("rawLogs").textContent = JSON.stringify(data, null, 2);
+
+      const count = data.count ?? 0;
+      document.getElementById("logCountChip").textContent = `${count} logs`;
+
+      lastLogsRaw = data.items ?? [];
+      populateHospitalFilter(lastLogsRaw);
+      computeKPIs(lastLogsRaw);
+
+      if (lastLogsRaw.length === 0) {
+        renderLogsTable([]);
+        updateCharts([]);
+        updateHospitalOverview([]);
+        updateMapMarkers([]);
+        return;
+      }
+
+      applyFiltersAndRender();
+      updateMapMarkers(lastLogsFiltered.length ? lastLogsFiltered : lastLogsRaw);
+    } catch (e) {
+      showError(String(e));
+    }
+  }
+
+  function updateCharts(items) {
+    const ordered = (items ?? []).slice();
+
+    let low = 0, med = 0, high = 0;
+    for (const it of ordered) {
+      if (it.predicted_load === "LOW") low++;
+      else if (it.predicted_load === "MEDIUM") med++;
+      else if (it.predicted_load === "HIGH") high++;
+    }
+
+    const pieEl = document.getElementById("pieChart");
+    if (pieEl) {
+      if (pieChartRef) pieChartRef.destroy();
+      pieChartRef = new Chart(pieEl, {
+        type: "doughnut",
+        data: {
+          labels: ["LOW", "MEDIUM", "HIGH"],
+          datasets: [{ data: [low, med, high] }]
+        },
+        options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+      });
+    }
+
+    const last = ordered.slice(-20);
+    const labels = last.map(x => (x.timestamp || "").split("T")[1]?.slice(0, 8) || "—");
+    const values = last.map(x => loadToNumber(x.predicted_load));
+
+    const lineEl = document.getElementById("lineChart");
+    if (lineEl) {
+      if (lineChartRef) lineChartRef.destroy();
+      lineChartRef = new Chart(lineEl, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "Load (LOW=1, MEDIUM=2, HIGH=3)",
+            data: values,
+            tension: 0.25
+          }]
+        },
+        options: { responsive: true, scales: { y: { min: 0, max: 3, ticks: { stepSize: 1 } } } }
+      });
+    }
+  }
+
+  function badgeForLoad(load) {
+    if (load === "HIGH") return `<span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-red-100 text-red-800">HIGH</span>`;
+    if (load === "MEDIUM") return `<span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-900">MEDIUM</span>`;
+    return `<span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-900">LOW</span>`;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function fillSample(level) {
+    if (level === "low") {
+      document.getElementById("hospital_id").value = "H02";
+      document.getElementById("hour").value = 10;
+      document.getElementById("day_of_week").value = 1;
+      document.getElementById("ambulance_cases").value = 1;
+      document.getElementById("walkin_cases").value = 3;
+      document.getElementById("weather_risk").value = 0;
+      document.getElementById("event_risk").value = 0;
+      document.getElementById("outbreak_risk").value = 0;
+
+      // ✅ NEW defaults for samples
+      document.getElementById("incident_type").value = "none";
+      document.getElementById("incident_severity").value = 0;
+
+      document.getElementById("hint").textContent = "Low preset loaded. Click “Run Decision”.";
+    } else if (level === "high") {
+      document.getElementById("hospital_id").value = "H03";
+      document.getElementById("hour").value = 21;
+      document.getElementById("day_of_week").value = 5;
+      document.getElementById("ambulance_cases").value = 20;
+      document.getElementById("walkin_cases").value = 40;
+      document.getElementById("weather_risk").value = 1;
+      document.getElementById("event_risk").value = 1;
+      document.getElementById("outbreak_risk").value = 1;
+
+      // ✅ NEW: make the demo feel realistic (accident scenario)
+      document.getElementById("incident_type").value = "accident";
+      document.getElementById("incident_severity").value = 8;
+
+      document.getElementById("hint").textContent = "High preset loaded. Click “Run Decision” to trigger emergency action.";
+    } else {
+      document.getElementById("hospital_id").value = "H01";
+      document.getElementById("hour").value = 19;
+      document.getElementById("day_of_week").value = 3;
+      document.getElementById("ambulance_cases").value = 12;
+      document.getElementById("walkin_cases").value = 25;
+      document.getElementById("weather_risk").value = 1;
+      document.getElementById("event_risk").value = 0;
+      document.getElementById("outbreak_risk").value = 0;
+
+      // ✅ NEW: medium sample = none
+      document.getElementById("incident_type").value = "none";
+      document.getElementById("incident_severity").value = 0;
+
+      document.getElementById("hint").textContent = "Medium preset loaded. Click “Run Decision”.";
+    }
+  }
+
+  async function checkServices() {
+    const chip = document.getElementById("apiStatus");
+    try {
+      const res = await fetch(LOGGER_LOGS_URL);
+      if (res.ok) {
+        chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-900";
+        chip.textContent = "🟢 Services online";
+      } else {
+        chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-900";
+        chip.textContent = "🟡 Partial connectivity";
+      }
+    } catch {
+      chip.className = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-red-100 text-red-800";
+      chip.textContent = "🔴 Services offline";
+    }
+  }
+
+  async function refreshAll() {
+    await checkServices();
+    await loadLogs();
+  }
+
+  // ✅ Monitoring Mode + Alerts
+  let monitorTimer = null;
+  let monitorRunning = false;
+
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.04;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      setTimeout(() => { osc.stop(); ctx.close(); }, 180);
+    } catch {}
+  }
+
+  function showHighAlert(message) {
+    const banner = document.getElementById("alertBanner");
+    const text = document.getElementById("alertText");
+    if (!banner || !text) return;
+    text.textContent = message || "HIGH load detected.";
+    banner.classList.remove("hidden");
+  }
+
+  function hideHighAlert() {
+    const banner = document.getElementById("alertBanner");
+    if (!banner) return;
+    banner.classList.add("hidden");
+  }
+
+  function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function autoGenerateScenario() {
+    const hid = pick(["H01", "H02", "H03"]);
+    const hour = randInt(0, 23);
+    const day = randInt(0, 6);
+
+    const eveningBoost = (hour >= 18 && hour <= 22) ? 1 : 0;
+
+    const weather = randInt(0, 1);
+    const eventRisk = randInt(0, 1);
+    const outbreak = randInt(0, 1);
+
+    // ✅ NEW: random incident dropdown + severity (most of the time none)
+    const incidentType = pick(["none", "none", "none", "accident", "dengue", "covid", "flood", "fire"]);
+    const incidentSeverity =
+      (incidentType === "none") ? 0 :
+      (incidentType === "dengue" || incidentType === "covid") ? randInt(2, 8) :
+      randInt(3, 10);
+
+    const ambulance = randInt(0 + eveningBoost*2, 12 + eveningBoost*8) + (weather ? 3 : 0) + (eventRisk ? 4 : 0);
+    const walkin = randInt(2 + eveningBoost*5, 30 + eveningBoost*15) + (eventRisk ? 8 : 0);
+
+    return {
+      hospital_id: hid,
+      hour,
+      day_of_week: day,
+      ambulance_cases: Math.max(0, ambulance),
+      walkin_cases: Math.max(0, walkin),
+      weather_risk: weather,
+      event_risk: eventRisk,
+      outbreak_risk: outbreak,
+
+      // ✅ NEW
+      incident_type: incidentType,
+      incident_severity: incidentSeverity
+    };
+  }
+
+  function applyScenarioToInputs(s) {
+    document.getElementById("hospital_id").value = s.hospital_id;
+    document.getElementById("hour").value = s.hour;
+    document.getElementById("day_of_week").value = s.day_of_week;
+    document.getElementById("ambulance_cases").value = s.ambulance_cases;
+    document.getElementById("walkin_cases").value = s.walkin_cases;
+    document.getElementById("weather_risk").value = s.weather_risk;
+    document.getElementById("event_risk").value = s.event_risk;
+    document.getElementById("outbreak_risk").value = s.outbreak_risk;
+
+    // ✅ NEW
+    document.getElementById("incident_type").value = s.incident_type || "none";
+    document.getElementById("incident_severity").value = Number(s.incident_severity ?? 0);
+  }
+
+  // ✅ FIX 2: correct input id AND correct fetch URL string
+  async function resetCapacityForHospital() {
+    try {
+      clearError();
+      const hospitalId = (document.getElementById("hospital_id").value || "H01").trim();
+
+      const res = await fetch(`${CAPACITY_BASE_URL}/${hospitalId}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!res.ok) throw new Error("Reset failed");
+      alert(`Reset done for ${hospitalId}`);
+      await loadLogs();
+    } catch (e) {
+      showError(String(e));
+    }
+  }
+
+  async function resetCapacityAll() {
+    try {
+      clearError();
+      const res = await fetch(`${CAPACITY_BASE_URL}/reset_all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!res.ok) throw new Error("Reset all failed");
+      alert("Reset done for all hospitals (H01-H03)");
+      await loadLogs();
+    } catch (e) {
+      showError(String(e));
+    }
+  }
+
+  async function runDecisionSilent() {
+    clearError();
+    const payload = getPayloadFromInputs();
+
+    try {
+      const res = await fetch(ALLOCATION_DECIDE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError({ status: res.status, response: data });
+        return null;
+      }
+
+      document.getElementById("outHospital").textContent = data.hospital_id ?? "—";
+      document.getElementById("outLoad").textContent = data.predicted_load ?? "—";
+      document.getElementById("outAction").textContent = prettifyAction(data.action ?? "—");
+      setSeverityChip(data.predicted_load);
+
+      // ✅ NEW: update incident analyzer card in monitoring mode too
+      updateIncidentCard(data);
+      updateTransferRecommendation(data.transfer_recommendation, data.hospital_id);
+
+      if (data.predicted_load === "HIGH") {
+        showHighAlert(`Hospital ${data.hospital_id}: HIGH load. Action: ${prettifyAction(data.action || "")}`);
+        beep();
+      } else {
+        hideHighAlert();
+      }
+
+      await loadLogs();
+      return data;
+    } catch (e) {
+      showError(String(e));
+      return null;
+    }
+  }
+
+  function startMonitoring() {
+    if (monitorRunning) return;
+    monitorRunning = true;
+
+    document.getElementById("startMonBtn").classList.add("hidden");
+    document.getElementById("stopMonBtn").classList.remove("hidden");
+    document.getElementById("hint").textContent = "Monitoring started. Auto-running decisions every 5 seconds…";
+
+    const first = autoGenerateScenario();
+    applyScenarioToInputs(first);
+    runDecisionSilent();
+
+    monitorTimer = setInterval(() => {
+      const s = autoGenerateScenario();
+      applyScenarioToInputs(s);
+      runDecisionSilent();
+    }, 5000);
+  }
+
+  function stopMonitoring() {
+    monitorRunning = false;
+    if (monitorTimer) clearInterval(monitorTimer);
+    monitorTimer = null;
+
+    document.getElementById("startMonBtn").classList.remove("hidden");
+    document.getElementById("stopMonBtn").classList.add("hidden");
+    document.getElementById("hint").textContent = "Monitoring stopped. You can run decisions manually.";
+
+    hideHighAlert();
+  }
+
+  // on load
+  checkServices();
+  loadLogs();
+  initMap();
+</script>
+</body>
+</html>
+```
